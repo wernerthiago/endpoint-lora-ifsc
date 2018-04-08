@@ -1,32 +1,13 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-#include <SoftwareSerial.h>
-
-// GPS implementation
-#include "TinyGPS.h"
-TinyGPS gps;
-//SoftwareSerial serialgps(5, 4); //TX, RX Seems right
-SoftwareSerial serialgps(4, 5);
-
-int year;
-byte month, day, hour, minute, second, hundredths;
-unsigned long chars;
-unsigned short sentences, failed_checksum;
-// GPS implementation
 
 // LoRaWAN NwkSKey, network session key
 // This is the default Semtech key, which is used by the early prototype TTN
 // network.
-static const PROGMEM u1_t NWKSKEY[16] = { 0xf1, 0xdb, 0xe6, 0x27, 0x22, 0x33, 0x52, 0x1a, 0x90, 0x69, 0x9a, 0x98, 0x42, 0xbb, 0xf9, 0xbb };
-
-// LoRaWAN AppSKey, application session key
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
-static const u1_t PROGMEM APPSKEY[16] = { 0xf1, 0xdb, 0xe6, 0x27, 0x22, 0x33, 0x52, 0x1a, 0x90, 0x69, 0x9a, 0x98, 0x42, 0xbb, 0xf9, 0xbb };
-
-// LoRaWAN end-device address (DevAddr)
-static const u4_t DEVADDR = 0x065a35e1 ; // <-- Change this address for every node!
+static const PROGMEM u1_t NWKSKEY[16] = { 0xf1, 0xd5, 0x26, 0xca, 0xab, 0x26, 0x2b, 0x66, 0x19, 0x0a, 0x3f, 0xc4, 0xf9, 0x64, 0x85, 0xf6 };
+static const u1_t PROGMEM APPSKEY[16] = { 0xf1, 0xd5, 0x26, 0xca, 0xab, 0x26, 0x2b, 0x66, 0x19, 0x0a, 0x3f, 0xc4, 0xf9, 0x64, 0x85, 0xf6 };
+static const u4_t DEVADDR = 0x07aa69a1 ; // <-- Change this address for every node!
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -35,9 +16,8 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-//static uint8_t mydata[] = "Hello, world!";
+static uint8_t mydata[] = "Hello World";
 static osjob_t sendjob;
-char * data;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
@@ -47,7 +27,7 @@ const unsigned TX_INTERVAL = 5;
 const lmic_pinmap lmic_pins = {
   .nss = 10,
   .rxtx = LMIC_UNUSED_PIN,
-  .rst = 9,
+  .rst = 8,
   .dio = {2, 3, 4},
 };
 
@@ -82,16 +62,14 @@ void onEvent (ev_t ev) {
     case EV_REJOIN_FAILED:
       Serial.println(F("EV_REJOIN_FAILED"));
       break;
-      break;
     case EV_TXCOMPLETE:
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK)
         Serial.println(F("Received ack"));
       if (LMIC.dataLen) {
-        // data received in rx slot after tx
-        Serial.print(F("Data Received: "));
-        Serial.write(LMIC.frame + LMIC.dataBeg, LMIC.dataLen);
-        Serial.println();
+        Serial.println(F("Received "));
+        Serial.println(LMIC.dataLen);
+        Serial.println(F(" bytes of payload"));
       }
       // Schedule next transmission
       os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
@@ -124,23 +102,7 @@ void do_send(osjob_t* j) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
     // Prepare upstream data transmission at the next possible time.
-    //while (serialgps.available())
-    //{
-      int c = serialgps.read();
-      Serial.println(c);
-      if (gps.encode(c))
-      {
-        float latitude, longitude;
-        gps.f_get_position(&latitude, &longitude);
-        Serial.print("Latitud/Longitud: ");
-        Serial.print(latitude, 5);
-        Serial.print(", ");
-        Serial.println(longitude, 5);
-      }
-    //}
-    data = "Hello";
-    Serial.println(data);
-    LMIC_setTxData2(1, reinterpret_cast<unsigned char*>(&data), sizeof(char*) - 1, 0);
+    LMIC_setTxData2(1, mydata, sizeof(mydata) - 1, 0);
     Serial.println(F("Packet queued"));
   }
   // Next TX is scheduled after TX_COMPLETE event.
@@ -148,21 +110,20 @@ void do_send(osjob_t* j) {
 
 void setup() {
   Serial.begin(115200);
-  serialgps.begin(9600);
   Serial.println(F("Starting"));
-
+  //GPS_Begin
+  ss.begin(9600);
+  //GPS_End
 #ifdef VCC_ENABLE
   // For Pinoccio Scout boards
   pinMode(VCC_ENABLE, OUTPUT);
   digitalWrite(VCC_ENABLE, HIGH);
   delay(1000);
 #endif
-
   // LMIC init
   os_init();
   // Reset the MAC state. Session and pending data transfers will be discarded.
   LMIC_reset();
-
   // Set static session parameters. Instead of dynamically establishing a session
   // by joining the network, precomputed session parameters are be provided.
 #ifdef PROGMEM
@@ -178,20 +139,13 @@ void setup() {
   // If not running an AVR with PROGMEM, just use the arrays directly
   LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
 #endif
-
-#if defined(CFG_us915)
   LMIC_selectSubBand(1);
-#endif
-
   // Disable link check validation
   LMIC_setLinkCheckMode(0);
-
   // TTN uses SF9 for its RX2 window.
   LMIC.dn2Dr = DR_SF9;
-
-  // Set data rate and transmit power (note: txpow seems to be ignored by the library)
+  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
   LMIC_setDrTxpow(DR_SF7, 14);
-
   // Start job
   do_send(&sendjob);
 }
