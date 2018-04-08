@@ -123,13 +123,20 @@ void do_send(osjob_t* j) {
     print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
     print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
     gps.f_get_position(&flat, &flon, &age);
-    String aux = String(flat,5);
+    String aux = String(flat, 5);
     aux = aux + ",";
-    aux = aux + String(flon,5);
-    aux.toCharArray(mydata,sizeof(mydata));
+    aux = aux + String(flon, 5);
+    aux.toCharArray(mydata, sizeof(mydata));
+    //StringToBinary_Begin
+    byte binary[aux.length()];
+    for (int i = 0; i < aux.length(); i++)
+    {
+      binary[i] = byte(aux[i]);
+    }
+    //StringToBinary_End
     //GPS_End
     // Prepare upstream data transmission at the next possible time.
-    LMIC_setTxData2(1, mydata, sizeof(mydata) - 1, 0);
+    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 0);
     Serial.println(F("Packet queued"));
   }
   // Next TX is scheduled after TX_COMPLETE event.
@@ -172,7 +179,9 @@ void setup() {
   // TTN uses SF9 for its RX2 window.
   LMIC.dn2Dr = DR_SF9;
   // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-  LMIC_setDrTxpow(DR_SF7, 14);
+  LMIC_setDrTxpow(DR_SF10, 14);
+  // Alterar taxa do código. Padrão 4/5.
+  LMIC.errcr = CR_4_8;
   // Start job
   do_send(&sendjob);
 }
@@ -205,7 +214,7 @@ static void print_float(float val, float invalid, int len, int prec)
     int vi = abs((int)val);
     int flen = prec + (val < 0.0 ? 2 : 1); // . and -
     flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i=flen; i<len; ++i)
+    for (int i = flen; i < len; ++i)
       Serial.print(' ');
   }
   smartdelay(0);
@@ -219,10 +228,10 @@ static void print_int(unsigned long val, unsigned long invalid, int len)
   else
     sprintf(sz, "%ld", val);
   sz[len] = 0;
-  for (int i=strlen(sz); i<len; ++i)
+  for (int i = strlen(sz); i < len; ++i)
     sz[i] = ' ';
   if (len > 0)
-    sz[len-1] = ' ';
+    sz[len - 1] = ' ';
   Serial.print(sz);
   smartdelay(0);
 }
@@ -239,7 +248,7 @@ static void print_date(TinyGPS &gps)
   {
     char sz[32];
     sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
-        month, day, year, hour, minute, second);
+            month, day, year, hour, minute, second);
     Serial.print(sz);
   }
   print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
@@ -249,7 +258,7 @@ static void print_date(TinyGPS &gps)
 static void print_str(const char *str, int len)
 {
   int slen = strlen(str);
-  for (int i=0; i<len; ++i)
-    Serial.print(i<slen ? str[i] : ' ');
+  for (int i = 0; i < len; ++i)
+    Serial.print(i < slen ? str[i] : ' ');
   smartdelay(0);
 }
