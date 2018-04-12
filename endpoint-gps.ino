@@ -34,7 +34,7 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 5;
+const unsigned TX_INTERVAL = 15;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -118,15 +118,17 @@ void do_send(osjob_t* j) {
     float flat, flon;
     unsigned long age, date, time, chars = 0;
     unsigned short sentences = 0, failed = 0;
+    int year;
     static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
 
     print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
     print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
     gps.f_get_position(&flat, &flon, &age);
-    String aux = String(flat, 5);
-    aux = aux + ",";
-    aux = aux + String(flon, 5);
-    aux.toCharArray(mydata, sizeof(mydata));
+    String latitude = String(flat, 5);
+    latitude.remove(0,4);
+    String longitude = String(flon, 5);
+    longitude.remove(0,4);
+    String aux = latitude + "," + longitude;
     //StringToBinary_Begin
     byte binary[aux.length()];
     for (int i = 0; i < aux.length(); i++)
