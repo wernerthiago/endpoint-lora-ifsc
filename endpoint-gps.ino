@@ -41,7 +41,7 @@ const lmic_pinmap lmic_pins = {
   .nss = 10,
   .rxtx = LMIC_UNUSED_PIN,
   .rst = 8,
-  .dio = {2, 3, 4},
+  .dio = {2, 3, 4}
 };
 
 void onEvent (ev_t ev) {
@@ -124,9 +124,9 @@ void do_send(osjob_t* j) {
     print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
     print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
     gps.f_get_position(&flat, &flon, &age);
-    String latitude = String(flat, 5);
+    String latitude = String(flat, 6);
     latitude.remove(0,4);
-    String longitude = String(flon, 5);
+    String longitude = String(flon, 6);
     longitude.remove(0,4);
     String aux = latitude + "," + longitude;
     //StringToBinary_Begin
