@@ -15,26 +15,17 @@ static void print_date(TinyGPS &gps);
 static void print_str(const char *str, int len);
 //GPS_End
 
-// LoRaWAN NwkSKey, network session key
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
 static const PROGMEM u1_t NWKSKEY[16] = { 0xf1, 0xd5, 0x26, 0xca, 0xab, 0x26, 0x2b, 0x66, 0x19, 0x0a, 0x3f, 0xc4, 0xf9, 0x64, 0x85, 0xf6 };
 static const u1_t PROGMEM APPSKEY[16] = { 0xf1, 0xd5, 0x26, 0xca, 0xab, 0x26, 0x2b, 0x66, 0x19, 0x0a, 0x3f, 0xc4, 0xf9, 0x64, 0x85, 0xf6 };
-static const u4_t DEVADDR = 0x07aa69a1 ; // <-- Change this address for every node!
+static const u4_t DEVADDR = 0x07aa69a1;
 
-// These callbacks are only used in over-the-air activation, so they are
-// left empty here (we cannot leave them out completely unless
-// DISABLE_JOIN is set in config.h, otherwise the linker will complain).
 void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-static uint8_t mydata[15];
 static osjob_t sendjob;
 
-// Schedule TX every this many seconds (might become longer due to duty
-// cycle limitations).
-const unsigned TX_INTERVAL = 15;
+const unsigned TX_INTERVAL = 60;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -79,13 +70,13 @@ void onEvent (ev_t ev) {
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK)
         Serial.println(F("Received ack"));
+        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       if (LMIC.dataLen) {
         Serial.println(F("Received "));
         Serial.println(LMIC.dataLen);
         Serial.println(F(" bytes of payload"));
       }
       // Schedule next transmission
-      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       break;
     case EV_LOST_TSYNC:
       Serial.println(F("EV_LOST_TSYNC"));
@@ -116,14 +107,7 @@ void do_send(osjob_t* j) {
   } else {
     //GPS_Begin
     float flat, flon;
-    unsigned long age, date, time, chars = 0;
-    unsigned short sentences = 0, failed = 0;
-    int year;
-    static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
-
-    print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
-    print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
-    gps.f_get_position(&flat, &flon, &age);
+    unpair(flat, flon) = getVectorData();
     String latitude = String(flat, 5);
     latitude.remove(0,4);
     String longitude = String(flon, 5);
@@ -137,11 +121,9 @@ void do_send(osjob_t* j) {
     }
     //StringToBinary_End
     //GPS_End
-    // Prepare upstream data transmission at the next possible time.
-    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 0);
+    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 1);
     Serial.println(F("Packet queued"));
   }
-  // Next TX is scheduled after TX_COMPLETE event.
 }
 
 void setup() {
@@ -150,41 +132,37 @@ void setup() {
   //GPS_Begin
   ss.begin(9600);
   //GPS_End
+
 #ifdef VCC_ENABLE
-  // For Pinoccio Scout boards
+
   pinMode(VCC_ENABLE, OUTPUT);
   digitalWrite(VCC_ENABLE, HIGH);
   delay(1000);
+
 #endif
-  // LMIC init
+
   os_init();
-  // Reset the MAC state. Session and pending data transfers will be discarded.
   LMIC_reset();
-  // Set static session parameters. Instead of dynamically establishing a session
-  // by joining the network, precomputed session parameters are be provided.
+
 #ifdef PROGMEM
-  // On AVR, these values are stored in flash and only copied to RAM
-  // once. Copy them to a temporary buffer here, LMIC_setSession will
-  // copy them into a buffer of its own again.
+
   uint8_t appskey[sizeof(APPSKEY)];
   uint8_t nwkskey[sizeof(NWKSKEY)];
   memcpy_P(appskey, APPSKEY, sizeof(APPSKEY));
   memcpy_P(nwkskey, NWKSKEY, sizeof(NWKSKEY));
   LMIC_setSession (0x1, DEVADDR, nwkskey, appskey);
+
 #else
-  // If not running an AVR with PROGMEM, just use the arrays directly
+
   LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
+
 #endif
+
   LMIC_selectSubBand(1);
-  // Disable link check validation
   LMIC_setLinkCheckMode(0);
-  // TTN uses SF9 for its RX2 window.
   LMIC.dn2Dr = DR_SF9;
-  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
   LMIC_setDrTxpow(DR_SF10, 14);
-  // Alterar taxa do código. Padrão 4/5.
   LMIC.errcr = CR_4_8;
-  // Start job
   do_send(&sendjob);
 }
 
@@ -263,4 +241,59 @@ static void print_str(const char *str, int len)
   for (int i = 0; i < len; ++i)
     Serial.print(i < slen ? str[i] : ' ');
   smartdelay(0);
+}
+
+template <typename T1, typename T2>
+struct t_unpair
+{
+  T1& a1;
+  T2& a2;
+  explicit t_unpair( T1& a1, T2& a2 ): a1(a1), a2(a2) { }
+  t_unpair<T1,T2>& operator = (const pair<T1,T2>& p)
+    {
+    a1 = p.first;
+    a2 = p.second;
+    return *this;
+    }
+};
+
+// Our functor helper (creates it)
+template <typename T1, typename T2>
+t_unpair<T1,T2> unpair( T1& a1, T2& a2 )
+{
+  return t_unpair<T1,T2>( a1, a2 );
+}
+
+// Our function that returns a pair
+pair<int,float> dosomething( char c )
+{
+  return make_pair<int,float>( c*10, c*2.9 );
+}
+
+pair<float,float> getVectorData()
+{
+  int aux = 0;
+  float flat[10], flon[10];
+  unsigned long age;
+  static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
+
+  while(aux < 10)
+  {
+    print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
+    print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
+    gps.f_get_position(&flat[aux], &flon[aux], &age);
+    aux++;
+    smartdelay(10000);
+  }
+  return make_pair<float,float>(median(flat),median(flon));
+}
+
+float median(float[] num)
+{
+  float median;
+  for(int i = 0; i < num.length(); i++)
+  {
+    median = ++num[i];
+  }
+  return median/num.length();
 }
