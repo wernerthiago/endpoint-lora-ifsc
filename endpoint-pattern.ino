@@ -65,7 +65,6 @@ void onEvent (ev_t ev) {
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK) {
         Serial.println(F("Received ack"));
-        //Transmiting only when receive the ACK.
         os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       }
       if (LMIC.dataLen) {
@@ -103,25 +102,16 @@ void do_send(osjob_t* j) {
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
-<<<<<<< HEAD
     String aux = "ABIJCSUD";
-=======
-    String aux = "ABI";
->>>>>>> ACK implemented and Binary message
     byte binary[aux.length()];
     for (int i = 0; i < aux.length(); i++)
     {
       binary[i] = byte(aux[i]);
     }
     //StringToBinary_End
-<<<<<<< HEAD
-    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 0);
-=======
     LMIC_setTxData2(1, binary, sizeof(binary) - 1, 1);
->>>>>>> ACK implemented and Binary message
     Serial.println(F("Packet queued"));
   }
-  // Next TX is scheduled after TX_COMPLETE event.
 }
 
 
@@ -130,29 +120,25 @@ void setup() {
   Serial.println(F("Starting"));
 
 #ifdef VCC_ENABLE
-  // For Pinoccio Scout boards
+
   pinMode(VCC_ENABLE, OUTPUT);
   digitalWrite(VCC_ENABLE, HIGH);
   delay(1000);
+
 #endif
 
-  // LMIC init
   os_init();
-  // Reset the MAC state. Session and pending data transfers will be discarded.
   LMIC_reset();
 
-  // Set static session parameters. Instead of dynamically establishing a session
-  // by joining the network, precomputed session parameters are be provided.
 #ifdef PROGMEM
-  // On AVR, these values are stored in flash and only copied to RAM
-  // once. Copy them to a temporary buffer here, LMIC_setSession will
-  // copy them into a buffer of its own again.
+
   uint8_t appskey[sizeof(APPSKEY)];
   uint8_t nwkskey[sizeof(NWKSKEY)];
   memcpy_P(appskey, APPSKEY, sizeof(APPSKEY));
   memcpy_P(nwkskey, NWKSKEY, sizeof(NWKSKEY));
   LMIC_setSession (0x1, DEVADDR, nwkskey, appskey);
   LMIC.dn2Dr = SF9;
+
 #else
   // If not running an AVR with PROGMEM, just use the arrays directly
   LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
@@ -163,18 +149,8 @@ void setup() {
   // Disable link check validation
   LMIC_setLinkCheckMode(0);
 
-  // TTN uses SF9 for its RX2 window.
-<<<<<<< HEAD
-  LMIC.dn2Dr = DR_SF9;
-
-  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-  LMIC_setDrTxpow(DR_SF10, 14);
-=======
-  //LMIC.dn2Dr = DR_SF9;
-
   // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
   LMIC_setDrTxpow(DR_SF7, 14);
->>>>>>> ACK implemented and Binary message
 
   // Alterar taxa do código. Padrão 4/5.
   LMIC.errcr = CR_4_8;
