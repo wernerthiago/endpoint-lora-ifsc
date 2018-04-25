@@ -63,15 +63,18 @@ void onEvent (ev_t ev) {
       break;
     case EV_TXCOMPLETE:
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-      if (LMIC.txrxFlags & TXRX_ACK)
+      if (LMIC.txrxFlags & TXRX_ACK) {
         Serial.println(F("Received ack"));
+        //Transmiting only when receive the ACK.
+        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+      }
       if (LMIC.dataLen) {
+        Serial.println("PASSOU IF DO TAMANHO");
         Serial.println(F("Received "));
         Serial.println(LMIC.dataLen);
         Serial.println(F(" bytes of payload"));
       }
       // Schedule next transmission
-      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       break;
     case EV_LOST_TSYNC:
       Serial.println(F("EV_LOST_TSYNC"));
@@ -100,14 +103,22 @@ void do_send(osjob_t* j) {
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
+<<<<<<< HEAD
     String aux = "ABIJCSUD";
+=======
+    String aux = "ABI";
+>>>>>>> ACK implemented and Binary message
     byte binary[aux.length()];
     for (int i = 0; i < aux.length(); i++)
     {
       binary[i] = byte(aux[i]);
     }
     //StringToBinary_End
+<<<<<<< HEAD
     LMIC_setTxData2(1, binary, sizeof(binary) - 1, 0);
+=======
+    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 1);
+>>>>>>> ACK implemented and Binary message
     Serial.println(F("Packet queued"));
   }
   // Next TX is scheduled after TX_COMPLETE event.
@@ -141,20 +152,29 @@ void setup() {
   memcpy_P(appskey, APPSKEY, sizeof(APPSKEY));
   memcpy_P(nwkskey, NWKSKEY, sizeof(NWKSKEY));
   LMIC_setSession (0x1, DEVADDR, nwkskey, appskey);
+  LMIC.dn2Dr = SF9;
 #else
   // If not running an AVR with PROGMEM, just use the arrays directly
   LMIC_setSession (0x1, DEVADDR, NWKSKEY, APPSKEY);
 #endif
+
   LMIC_selectSubBand(1);
 
   // Disable link check validation
   LMIC_setLinkCheckMode(0);
 
   // TTN uses SF9 for its RX2 window.
+<<<<<<< HEAD
   LMIC.dn2Dr = DR_SF9;
 
   // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
   LMIC_setDrTxpow(DR_SF10, 14);
+=======
+  //LMIC.dn2Dr = DR_SF9;
+
+  // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
+  LMIC_setDrTxpow(DR_SF7, 14);
+>>>>>>> ACK implemented and Binary message
 
   // Alterar taxa do código. Padrão 4/5.
   LMIC.errcr = CR_4_8;
