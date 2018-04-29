@@ -1,6 +1,7 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#define NUM_COLETAS 10
 //GPS_Begin
 #include <SoftwareSerial.h>
 #include <TinyGPS.h>
@@ -9,10 +10,7 @@ TinyGPS gps;
 SoftwareSerial ss(7, 6);
 
 static void smartdelay(unsigned long ms);
-static void print_float(float val, float invalid, int len, int prec);
 static void print_int(unsigned long val, unsigned long invalid, int len);
-static void print_date(TinyGPS &gps);
-static void print_str(const char *str, int len);
 //GPS_End
 
 static const PROGMEM u1_t NWKSKEY[16] = { 0xf1, 0xd5, 0x26, 0xca, 0xab, 0x26, 0x2b, 0x66, 0x19, 0x0a, 0x3f, 0xc4, 0xf9, 0x64, 0x85, 0xf6 };
@@ -113,15 +111,8 @@ void do_send(osjob_t* j) {
     String longitude = String(flon, 5);
     longitude.remove(0,4);
     String aux = latitude + "," + longitude;
-    //StringToBinary_Begin
-    byte binary[aux.length()];
-    for (int i = 0; i < aux.length(); i++)
-    {
-      binary[i] = byte(aux[i]);
-    }
-    //StringToBinary_End
     //GPS_End
-    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 1);
+    LMIC_setTxData2(1,(unsigned char *) (aux.c_str()) , aux.length(), 1);
     Serial.println(F("Packet queued"));
   }
 }
@@ -170,8 +161,7 @@ void loop() {
   os_runloop_once();
 }
 
-static void smartdelay(unsigned long ms)
-{
+static void smartdelay(unsigned long ms) {
   unsigned long start = millis();
   do
   {
@@ -180,28 +170,7 @@ static void smartdelay(unsigned long ms)
   } while (millis() - start < ms);
 }
 
-static void print_float(float val, float invalid, int len, int prec)
-{
-  if (val == invalid)
-  {
-    while (len-- > 1)
-      Serial.print('*');
-    Serial.print(' ');
-  }
-  else
-  {
-    Serial.print(val, prec);
-    int vi = abs((int)val);
-    int flen = prec + (val < 0.0 ? 2 : 1); // . and -
-    flen += vi >= 1000 ? 4 : vi >= 100 ? 3 : vi >= 10 ? 2 : 1;
-    for (int i = flen; i < len; ++i)
-      Serial.print(' ');
-  }
-  smartdelay(0);
-}
-
-static void print_int(unsigned long val, unsigned long invalid, int len)
-{
+static void print_int(unsigned long val, unsigned long invalid, int len) {
   char sz[32];
   if (val == invalid)
     strcpy(sz, "*******");
@@ -216,36 +185,8 @@ static void print_int(unsigned long val, unsigned long invalid, int len)
   smartdelay(0);
 }
 
-static void print_date(TinyGPS &gps)
-{
-  int year;
-  byte month, day, hour, minute, second, hundredths;
-  unsigned long age;
-  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-  if (age == TinyGPS::GPS_INVALID_AGE)
-    Serial.println("GPS_INVALID_AGE ");
-  else
-  {
-    char sz[32];
-    sprintf(sz, "%02d/%02d/%02d %02d:%02d:%02d ",
-            month, day, year, hour, minute, second);
-    Serial.print(sz);
-  }
-  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
-  smartdelay(0);
-}
-
-static void print_str(const char *str, int len)
-{
-  int slen = strlen(str);
-  for (int i = 0; i < len; ++i)
-    Serial.print(i < slen ? str[i] : ' ');
-  smartdelay(0);
-}
-
 template <typename T1, typename T2>
-struct t_unpair
-{
+struct t_unpair {
   T1& a1;
   T2& a2;
   explicit t_unpair( T1& a1, T2& a2 ): a1(a1), a2(a2) { }
@@ -259,31 +200,27 @@ struct t_unpair
 
 // Our functor helper (creates it)
 template <typename T1, typename T2>
-t_unpair<T1,T2> unpair( T1& a1, T2& a2 )
-{
+t_unpair<T1,T2> unpair( T1& a1, T2& a2 ) {
   return t_unpair<T1,T2>( a1, a2 );
 }
 
 // Our function that returns a pair
-pair<int,float> dosomething( char c )
-{
+pair<int,float> dosomething( char c ) {
   return make_pair<int,float>( c*10, c*2.9 );
 }
 
-pair<float,float> getVectorData()
-{
+pair<float,float> getVectorData() {
   int aux = 0;
-  float flat[10], flon[10];
+  float flat[NUM_COLETAS], flon[NUM_COLETAS];
   unsigned long age;
   static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
 
-  while(aux < 10)
+  while(aux < NUM_COLETAS)
   {
     print_int(gps.satellites(), TinyGPS::GPS_INVALID_SATELLITES, 5);
     print_int(gps.hdop(), TinyGPS::GPS_INVALID_HDOP, 5);
     gps.f_get_position(&flat[aux], &flon[aux], &age);
     aux++;
-    smartdelay(10000);
   }
   return make_pair<float,float>(median(flat),median(flon));
 }
