@@ -1,12 +1,20 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#include <SoftwareSerial.h>
+
+#define NUM_COLETAS 4
 
 String datalogger = "Iniciando";
+SoftwareSerial mySerial(6,7);
+
+float temperatura[NUM_COLETAS];
+float radar[NUM_COLETAS];
+float pluviometro[NUM_COLETAS];
 
 static const PROGMEM u1_t NWKSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb}
 static const u1_t PROGMEM APPSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb}
-static const u4_t DEVADDR = 0x065a35e1; // <-- Change this address for every node!
+static const u4_t DEVADDR = 0x065a35e1;
 
 void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
@@ -14,14 +22,14 @@ void os_getDevKey (u1_t* buf) { }
 
 static osjob_t sendjob;
 
-const unsigned TX_INTERVAL = 15;
+const unsigned TX_INTERVAL = 300;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
-    .nss = 10,
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 9,
-    .dio = {2, 3, 4},
+  .nss = 10,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 8,
+  .dio = {2, 3, 4},
 };
 
 void onEvent (ev_t ev) {
@@ -99,7 +107,6 @@ void do_send(osjob_t* j) {
   }
 }
 
-
 void setup() {
   Serial.begin(115200);
   mySerial.begin(9600);
@@ -138,17 +145,73 @@ void setup() {
     do_send(&sendjob);
 }
 
-
 void loop() {
-  int i=0;
-  String c;
-  if(mySerial.available()){
-    c = mySerial.readString();
-    i = c.indexOf("9971");
-    if(i!=-1){
-      datalogger = c.substring(i);
-      datalogger.replace("\n"," ");
+  getData();
+}
+
+void getData() {
+  int m = 0, k = 0, lastPosition = 0;
+  float pluv = 0, temp = 0, rad = 0;
+  String mensagem;
+  String aux[7] = {};
+  String c = "9971\n2018\n208\n1831\n12.70\n83\n2.00\n12.5";
+
+  while (k < NUM_COLETAS) {
+    if (mySerial.available()) {
+      c = mySerial.readString();
+      lastPosition = 0;
+      m = 0;
+      for (int j = 0; j < c.length() + 1; j++) {
+        if (c.charAt(j) == '\n') {
+          if (m == 0) {
+            aux[m] = c.substring(lastPosition, j);
+          } else {
+            aux[m] = c.substring(lastPosition + 1, j);
+          }
+          lastPosition = j;
+          m++;
+        }
+      }
+      //Terminando de montar o array
+      aux[m] = c.substring(lastPosition + 1, c.length());
+      //Coletando as informacoes dos sensores
+      temperatura[k] = aux[6].toFloat();
+      radar[k] = aux[5].toFloat();
+      pluviometro[k] = aux[4].toFloat();
+      //Esperando para realizar a proxima coleta
+      k++;
+    } else {
+      //Se nao estiver disponivel espera ate que esteja.
+    }
+    os_runloop_once();
+  }
+  //Fazendo as medias das coletas dos sensores
+  aux[6] = median(temperatura);
+  aux[5] = median(radar);
+  aux[4] = maximum(pluviometro);
+
+  //Montando a string que sera enviada atraves do LoRa
+  for (int j = 0; j < 7; j++) {
+    mensagem = mensagem + aux[j] + ",";
+  }
+  //Terminando de montar a string
+  datalogger = mensagem + c.substring(lastPosition + 1, c.length());
+}
+
+String median(float num[]) {
+  float aux = 0;
+  for (int i = 0; i < sizeof(num); i++) {
+    aux = aux + num[i];
+  }
+  return String(aux / sizeof(num));
+}
+
+String maximum(float array[]) {
+  float mxm = array[0];
+  for (int i = 0; i < sizeof(array); i++) {
+    if (array[i] > mxm) {
+      mxm = array[i];
     }
   }
-  os_runloop_once();
+  return String(mxm);
 }
