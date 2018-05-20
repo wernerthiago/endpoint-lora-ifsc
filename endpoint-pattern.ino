@@ -21,6 +21,7 @@ static osjob_t sendjob;
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
 const unsigned TX_INTERVAL = 15;
+int ttl;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -63,12 +64,18 @@ void onEvent (ev_t ev) {
       break;
     case EV_TXCOMPLETE:
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-      if (LMIC.txrxFlags & TXRX_ACK) {
-        Serial.println(F("Received ack"));
-        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+      while (ttl < 4) {
+        if (LMIC.txrxFlags & TXRX_ACK) {
+          Serial.println(F("Received ack"));
+          break;
+        }
+        ttl++;
       }
+
+      ttl = 0;
+      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+
       if (LMIC.dataLen) {
-        Serial.println("PASSOU IF DO TAMANHO");
         Serial.println(F("Received "));
         Serial.println(LMIC.dataLen);
         Serial.println(F(" bytes of payload"));
@@ -118,6 +125,7 @@ void do_send(osjob_t* j) {
 void setup() {
   Serial.begin(115200);
   Serial.println(F("Starting"));
+  ttl = 0;
 
 #ifdef VCC_ENABLE
 
