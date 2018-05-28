@@ -20,8 +20,10 @@ static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 15;
-int ttl;
+const unsigned TX_INTERVAL = 300;
+int ttl = 0;
+String data = "Iniciando";
+
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -64,23 +66,23 @@ void onEvent (ev_t ev) {
       break;
     case EV_TXCOMPLETE:
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-      while (ttl < 4) {
-        if (LMIC.txrxFlags & TXRX_ACK) {
-          Serial.println(F("Received ack"));
-          break;
+      if (LMIC.txrxFlags & TXRX_ACK) {
+        Serial.println(F("Received ack"));
+        ttl = 0;
+      } else {
+        if (ttl < 10) {
+          ttl++;
+          Serial.print("TTL: ");
+          Serial.println(ttl);
+          os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(1), do_send);
         }
-        ttl++;
       }
-
-      ttl = 0;
-      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
-
       if (LMIC.dataLen) {
         Serial.println(F("Received "));
-        Serial.println(LMIC.dataLen);
+        Serial.print(LMIC.dataLen);
         Serial.println(F(" bytes of payload"));
       }
-      // Schedule next transmission
+      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       break;
     case EV_LOST_TSYNC:
       Serial.println(F("EV_LOST_TSYNC"));
@@ -109,14 +111,8 @@ void do_send(osjob_t* j) {
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
-    String aux = "ABIJCSUD";
-    byte binary[aux.length()];
-    for (int i = 0; i < aux.length(); i++)
-    {
-      binary[i] = byte(aux[i]);
-    }
-    //StringToBinary_End
-    LMIC_setTxData2(1, binary, sizeof(binary) - 1, 1);
+    data = "Mensagem";
+    LMIC_setTxData2(1, (unsigned char *) data.c_str(), data.length(), 1);
     Serial.println(F("Packet queued"));
   }
 }
