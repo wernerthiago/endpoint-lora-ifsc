@@ -1,11 +1,12 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+//#include <SoftwareSerial.h>
 
 String datalogger = "Iniciando";
 
-static const PROGMEM u1_t NWKSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb}
-static const u1_t PROGMEM APPSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb}
+static const PROGMEM u1_t NWKSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb};
+static const u1_t PROGMEM APPSKEY[16] = {0xf1,0xdb,0xe6,0x27,0x22,0x33,0x52,0x1a,0x90,0x69,0x9a,0x98,0x42,0xbb,0xf9,0xbb};
 static const u4_t DEVADDR = 0x065a35e1; // <-- Change this address for every node!
 
 void os_getArtEui (u1_t* buf) { }
@@ -14,7 +15,8 @@ void os_getDevKey (u1_t* buf) { }
 
 static osjob_t sendjob;
 
-const unsigned TX_INTERVAL = 15;
+const unsigned TX_INTERVAL = 300;
+int ttl = 0;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -57,15 +59,23 @@ void onEvent (ev_t ev) {
       break;
     case EV_TXCOMPLETE:
       Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
-      if (LMIC.txrxFlags & TXRX_ACK)
+      if (LMIC.txrxFlags & TXRX_ACK) {
         Serial.println(F("Received ack"));
-        os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
+        ttl = 0;
+      } else {
+        if (ttl < 5) {
+          ttl++;
+          Serial.print("TTL: ");
+          Serial.println(ttl);
+          os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(1), do_send);
+        }
+      }
       if (LMIC.dataLen) {
         Serial.println(F("Received "));
-        Serial.println(LMIC.dataLen);
+        Serial.print(LMIC.dataLen);
         Serial.println(F(" bytes of payload"));
       }
-      // Schedule next transmission
+      os_setTimedCallback(&sendjob, os_getTime() + sec2osticks(TX_INTERVAL), do_send);
       break;
     case EV_LOST_TSYNC:
       Serial.println(F("EV_LOST_TSYNC"));
@@ -94,15 +104,17 @@ void do_send(osjob_t* j) {
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
-    LMIC_setTxData2(1,(unsigned char *) (datalogger.c_str()) , datalogger.length(), 1);
-    Serial.println(F("Packet queued"));
+    if(datalogger != "Iniciando") {
+      LMIC_setTxData2(1,(unsigned char *) (datalogger.c_str()) , datalogger.length(), 1);
+      Serial.println(F("Packet queued"));  
+    }
   }
 }
 
 
 void setup() {
   Serial.begin(115200);
-  mySerial.begin(9600);
+  Serial1.begin(9600);
   Serial.println(F("Starting"));
 
   #ifdef VCC_ENABLE
@@ -142,12 +154,15 @@ void setup() {
 void loop() {
   int i=0;
   String c;
-  if(mySerial.available()){
-    c = mySerial.readString();
+  
+  if(Serial1.available()){
+    c = Serial1.readString();
     i = c.indexOf("9971");
     if(i!=-1){
       datalogger = c.substring(i);
       datalogger.replace("\n"," ");
+      Serial.println("Serial is avaiable...");
+      Serial.println(datalogger);
     }
   }
   os_runloop_once();
