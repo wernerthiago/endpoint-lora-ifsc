@@ -1,7 +1,6 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
-//#include <SoftwareSerial.h>
 
 String datalogger = "Iniciando";
 
